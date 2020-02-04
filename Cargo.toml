@@ -1,0 +1,25 @@
+[package]
+name = "cf-ddns"
+version = "0.1.0"
+authors = ["Sherlock Holo <sherlockya@gmail.com>"]
+edition = "2018"
+keywords = ["CloudFlare", "DDNS"]
+license = "MIT"
+description = "a simple CloudFlare DDNS client."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.8"
+reqwest = { version = "0.10", features = ["json", "gzip", "socks"] }
+tokio = { version = "0.2", features = ["macros", "udp"] }
+anyhow = "1.0"
+structopt = "0.3"
+lazy_static = "1.4.0"
+log = "0.4"
+pretty_env_logger = "0.4"
+
+#runtime-fmt = "0.4"
+#libc = "0.2"
