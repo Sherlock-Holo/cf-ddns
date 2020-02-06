@@ -1,6 +1,5 @@
-use std::env;
-
 use anyhow::Result;
+use log::LevelFilter;
 use structopt::StructOpt;
 
 use crate::cmd::Opt;
@@ -36,11 +35,13 @@ pub async fn run() -> Result<()> {
 }
 
 fn log_init(debug: bool) {
+    let mut builder = pretty_env_logger::formatted_timed_builder();
+
     if debug {
-        env::set_var("RUST_LOG", "debug");
+        builder.filter_level(LevelFilter::Debug);
     } else {
-        env::set_var("RUST_LOG", "info");
+        builder.filter_level(LevelFilter::Info);
     }
 
-    pretty_env_logger::init_timed();
+    builder.init();
 }
