@@ -12,20 +12,20 @@ pub enum DnsType {
     A,
     AAAA,
     /*    CNAME,
-        TXT,
-        SRV,
-        LOC,
-        MX,
-        NS,
-        SPF,
-        CERT,
-        DNSKEY,
-        DS,
-        NAPTR,
-        SMIMEA,
-        SSHFP,
-        TLSA,
-        URI,*/
+    TXT,
+    SRV,
+    LOC,
+    MX,
+    NS,
+    SPF,
+    CERT,
+    DNSKEY,
+    DS,
+    NAPTR,
+    SMIMEA,
+    SSHFP,
+    TLSA,
+    URI,*/
 }
 
 impl FromStr for DnsType {
@@ -38,21 +38,21 @@ impl FromStr for DnsType {
             "A" => Ok(A),
             "AAAA" => Ok(AAAA),
             /*            "CNAME" => Ok(CNAME),
-                        "TXT" => Ok(TXT),
-                        "SRV" => Ok(SRV),
-                        "LOC" => Ok(LOC),
-                        "MX" => Ok(MX),
-                        "NS" => Ok(NS),
-                        "SPF" => Ok(SPF),
-                        "CERT" => Ok(CERT),
-                        "DNSKEY" => Ok(DNSKEY),
-                        "DS" => Ok(DS),
-                        "NAPTR" => Ok(NAPTR),
-                        "SMIMEA" => Ok(SMIMEA),
-                        "SSHFP" => Ok(SSHFP),
-                        "TLSA" => Ok(TLSA),
-                        "URI" => Ok(URI),*/
-            _ => Err(anyhow::format_err!("unsupported dns type {}", s))
+            "TXT" => Ok(TXT),
+            "SRV" => Ok(SRV),
+            "LOC" => Ok(LOC),
+            "MX" => Ok(MX),
+            "NS" => Ok(NS),
+            "SPF" => Ok(SPF),
+            "CERT" => Ok(CERT),
+            "DNSKEY" => Ok(DNSKEY),
+            "DS" => Ok(DS),
+            "NAPTR" => Ok(NAPTR),
+            "SMIMEA" => Ok(SMIMEA),
+            "SSHFP" => Ok(SSHFP),
+            "TLSA" => Ok(TLSA),
+            "URI" => Ok(URI),*/
+            _ => Err(anyhow::format_err!("unsupported dns type {}", s)),
         }
     }
 }
@@ -209,7 +209,13 @@ struct CreateOrUpdateDnsRecordRequest {
 }
 
 impl CreateOrUpdateDnsRecordRequest {
-    fn new(dns_type: DnsType, name: String, content: String, ttl: Option<u32>, proxied: Option<bool>) -> Self {
+    fn new(
+        dns_type: DnsType,
+        name: String,
+        content: String,
+        ttl: Option<u32>,
+        proxied: Option<bool>,
+    ) -> Self {
         Self {
             dns_type,
             name,
@@ -226,13 +232,13 @@ impl CreateOrUpdateDnsRecordRequest {
     }
 }
 
-pub struct Client<'a> {
+pub struct Client {
     client: reqwest::Client,
-    cfg: &'a Config,
+    cfg: Config,
 }
 
-impl<'a> Client<'a> {
-    pub fn new(cfg: &'a Config) -> Self {
+impl Client {
+    pub fn new(cfg: Config) -> Self {
         Client {
             client: reqwest::Client::new(),
             cfg,
@@ -248,71 +254,101 @@ impl<'a> Client<'a> {
 
         match self.get_dns_record_id(&domain_zone_id).await? {
             Some(dns_record_id) => {
-                self.update_dns_record(&domain_zone_id, &dns_record_id, content).await
+                self.update_dns_record(&domain_zone_id, &dns_record_id, content)
+                    .await
             }
 
-            None => {
-                self.create_dns_record(&domain_zone_id, content).await
-            }
+            None => self.create_dns_record(&domain_zone_id, content).await,
         }
     }
 
     async fn get_domain_zone_id(&self) -> Result<Option<String>> {
         const LIST_ZONE_API: &str = "https://api.cloudflare.com/client/v4/zones";
 
-        let resp = self.client.get(LIST_ZONE_API)
+        let resp = self
+            .client
+            .get(LIST_ZONE_API)
             .header("X-Auth-Email", &self.cfg.email)
             .header("X-Auth-Key", &self.cfg.auth_key)
-            .send().await.context("send get domain zone id request failed")?;
+            .send()
+            .await
+            .context("send get domain zone id request failed")?;
 
         check_status_code(resp.status())?;
 
-        let resp: ListZonesResponse = resp.json().await.context("get domain zone id response failed")?;
+        let resp: ListZonesResponse = resp
+            .json()
+            .await
+            .context("get domain zone id response failed")?;
 
         if !resp.success {
-            return Err(anyhow::anyhow!("get domain zone id failed: {:?}", resp.errors));
+            return Err(anyhow::anyhow!(
+                "get domain zone id failed: {:?}",
+                resp.errors
+            ));
         }
 
-        for result in resp.result {
-            if result.name == self.cfg.domain {
-                return Ok(Some(result.id));
+        Ok(resp.result.into_iter().find_map(|result| {
+            if &self.cfg.domain == &result.name {
+                Some(result.id)
+            } else {
+                None
             }
-        }
-
-        Ok(None)
+        }))
     }
 
     async fn get_dns_record_id(&self, domain_zone_id: &str) -> Result<Option<String>> {
-        const GET_DNS_RECORD_API: &str = "https://api.cloudflare.com/client/v4/zones/{}/dns_records";
+        const GET_DNS_RECORD_API: &str =
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records";
 
         let url = GET_DNS_RECORD_API.replace("{}", domain_zone_id);
 
-        let resp = self.client.get(&url)
+        let resp = self
+            .client
+            .get(&url)
             .header("X-Auth-Email", &self.cfg.email)
             .header("X-Auth-Key", &self.cfg.auth_key)
-            .query(&vec![("type", format!("{:?}", self.cfg.dns_type)), ("name", self.cfg.name.to_string())])
-            .send().await.context("send get dns record id request failed")?;
+            .query(&vec![
+                ("type", format!("{:?}", self.cfg.dns_type)),
+                ("name", self.cfg.name.to_string()),
+            ])
+            .send()
+            .await
+            .context("send get dns record id request failed")?;
 
         check_status_code(resp.status())?;
 
-        let dns_records: ListDnsRecordsResponse = resp.json().await.context("get dns record id response failed")?;
+        let dns_records: ListDnsRecordsResponse = resp
+            .json()
+            .await
+            .context("get dns record id response failed")?;
 
         if !dns_records.success {
-            return Err(anyhow::anyhow!("get dns record id failed: {:?}", dns_records.errors));
+            return Err(anyhow::anyhow!(
+                "get dns record id failed: {:?}",
+                dns_records.errors
+            ));
         }
 
-        match dns_records.result.iter().find(|result| result.name == self.cfg.name) {
+        match dns_records
+            .result
+            .iter()
+            .find(|result| result.name == self.cfg.name)
+        {
             None => Ok(None),
-            Some(result) => Ok(Some(result.id.to_string()))
+            Some(result) => Ok(Some(result.id.to_string())),
         }
     }
 
     async fn create_dns_record(&self, domain_zone_id: &str, content: &str) -> Result<()> {
-        const CREATE_DNS_RECORD_API: &str = "https://api.cloudflare.com/client/v4/zones/{}/dns_records";
+        const CREATE_DNS_RECORD_API: &str =
+            "https://api.cloudflare.com/client/v4/zones/{}/dns_records";
 
         let url = CREATE_DNS_RECORD_API.replace("{}", domain_zone_id);
 
-        let resp = self.client.post(&url)
+        let resp = self
+            .client
+            .post(&url)
             .header("X-Auth-Email", &self.cfg.email)
             .header("X-Auth-Key", &self.cfg.auth_key)
             .json(&CreateOrUpdateDnsRecordRequest::new(
@@ -322,28 +358,46 @@ impl<'a> Client<'a> {
                 self.cfg.ttl,
                 self.cfg.proxied,
             ))
-            .send().await.context("send create dns record id request failed")?;
+            .send()
+            .await
+            .context("send create dns record id request failed")?;
 
         check_status_code(resp.status())?;
 
-        let resp: CreateOrUpdateDnsRecordResponse = resp.json().await.context("get create record id response failed")?;
+        let resp: CreateOrUpdateDnsRecordResponse = resp
+            .json()
+            .await
+            .context("get create record id response failed")?;
 
         if !resp.success {
-            return Err(anyhow::anyhow!("create dns record id failed: {:?}", resp.errors));
+            return Err(anyhow::anyhow!(
+                "create dns record id failed: {:?}",
+                resp.errors
+            ));
         }
 
         match resp.result {
             None => Err(anyhow::anyhow!("no dns record found")),
-            Some(_result) => Ok(())
+            Some(_result) => Ok(()),
         }
     }
 
-    async fn update_dns_record(&self, domain_zone_id: &str, dns_record_id: &str, content: &str) -> Result<()> {
-        const UPDATE_DNS_RECORD_API: &str = "https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{dns_record_id}";
+    async fn update_dns_record(
+        &self,
+        domain_zone_id: &str,
+        dns_record_id: &str,
+        content: &str,
+    ) -> Result<()> {
+        const UPDATE_DNS_RECORD_API: &str =
+            "https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{dns_record_id}";
 
-        let url = UPDATE_DNS_RECORD_API.replace("{zone_id}", domain_zone_id).replace("{dns_record_id}", dns_record_id);
+        let url = UPDATE_DNS_RECORD_API
+            .replace("{zone_id}", domain_zone_id)
+            .replace("{dns_record_id}", dns_record_id);
 
-        let resp = self.client.put(&url)
+        let resp = self
+            .client
+            .put(&url)
             .header("X-Auth-Email", &self.cfg.email)
             .header("X-Auth-Key", &self.cfg.auth_key)
             .json(&CreateOrUpdateDnsRecordRequest::new(
@@ -353,14 +407,22 @@ impl<'a> Client<'a> {
                 self.cfg.ttl,
                 self.cfg.proxied,
             ))
-            .send().await.context("send update dns record id request failed")?;
+            .send()
+            .await
+            .context("send update dns record id request failed")?;
 
         check_status_code(resp.status())?;
 
-        let resp: CreateOrUpdateDnsRecordResponse = resp.json().await.context("get update record id response failed")?;
+        let resp: CreateOrUpdateDnsRecordResponse = resp
+            .json()
+            .await
+            .context("get update record id response failed")?;
 
         if !resp.success {
-            return Err(anyhow::anyhow!("update dns record id failed: {:?}", resp.errors));
+            return Err(anyhow::anyhow!(
+                "update dns record id failed: {:?}",
+                resp.errors
+            ));
         }
 
         Ok(())
@@ -369,8 +431,12 @@ impl<'a> Client<'a> {
 
 fn check_status_code(status: StatusCode) -> Result<()> {
     if status != StatusCode::OK {
-        let err = anyhow::anyhow!("response status code is {}, expect {}", status, StatusCode::OK);
-        log::error!("{}",err);
+        let err = anyhow::anyhow!(
+            "response status code is {}, expect {}",
+            status,
+            StatusCode::OK
+        );
+        log::error!("{}", err);
         return Err(err);
     }
 

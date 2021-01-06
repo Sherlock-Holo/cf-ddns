@@ -5,10 +5,10 @@ use structopt::StructOpt;
 use crate::cmd::Opt;
 use crate::dns::{Client, DnsType};
 
-mod dns;
-mod config;
-mod ip;
 mod cmd;
+mod config;
+mod dns;
+mod ip;
 
 pub async fn run() -> Result<()> {
     let opt = Opt::from_args();
@@ -29,7 +29,7 @@ pub async fn run() -> Result<()> {
 
     log::info!("IP: {}", content);
 
-    let client = Client::new(&cfg);
+    let client = Client::new(cfg);
 
     client.run(&content).await
 }
